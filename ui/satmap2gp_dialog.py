@@ -1,3 +1,5 @@
+import os.path
+
 from PyQt5.QtWidgets import (
     QDialog, QLabel, QLineEdit, QPushButton,
     QVBoxLayout, QHBoxLayout, QFileDialog
@@ -22,6 +24,10 @@ class Satmap2GPDialog(QDialog):
         self.filename = "lidar"
 
         self.init_ui()
+
+        if parent and hasattr(parent, "project_root") and parent.project_root:
+            # self.save_edit.setText(parent.project_root)
+            self.save_edit.setText(os.path.join(parent.project_root, "GPLidar"))
 
     def init_ui(self):
         layout = QVBoxLayout()

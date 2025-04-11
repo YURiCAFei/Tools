@@ -1,3 +1,5 @@
+import os.path
+
 from PyQt5.QtWidgets import (
     QDialog, QLabel, QLineEdit, QPushButton,
     QVBoxLayout, QHBoxLayout, QFileDialog
@@ -23,6 +25,10 @@ class DecompressDialog(QDialog):
         self.output_path = ""
 
         self.init_ui()
+
+        if parent and hasattr(parent, "project_root") and parent.project_root:
+            # self.output_edit.setText(parent.project_root)
+            self.output_edit.setText(os.path.join(parent.project_root, "decompress"))
 
     def init_ui(self):
         layout = QVBoxLayout()
