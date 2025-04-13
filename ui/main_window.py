@@ -4,11 +4,14 @@ import datetime
 from PyQt5.QtWidgets import QMainWindow, QWidget, QLabel, QTextEdit, QListWidget, QVBoxLayout, QHBoxLayout, QSlider, \
     QFileDialog, QAction, QListWidgetItem, QMenuBar, QMenu, QDialog, QProgressBar, QPushButton, QSizePolicy, \
     QSplitter, QMessageBox
-from PyQt5.QtCore import Qt, QTimer
+from PyQt5.QtCore import Qt, QTimer, QThreadPool
 from PyQt5.QtGui import QPixmap
+from PyQt5 import QtGui
 
+from ui.extract_boundary_dialog import ExtractBoundaryDialog
 from ui.orthorectify_dialog import OrthorectifyDialog
 from utils.decompress_worker import DecompressWorker
+from utils.extract_boundary_worker import ExtractBoundaryTask
 from utils.image_loader import ImageLoader
 from utils.layer_manager import LayerManager
 from utils.coord_converter import CoordConverter
@@ -65,20 +68,25 @@ class MainWindow(QMainWindow):
 
         self.coord_label = QLabel("坐标: ")
         self.coord_label.setFixedHeight(20)
+        self.map_canvas.coord_label = self.coord_label
 
-        layout = QVBoxLayout()
-        layout.addWidget(QLabel("图片显示区"))
-        # layout.addWidget(self.image_label)
-        layout.addWidget(self.map_canvas)
-        layout.addWidget(self.zoom_slider)
-        layout.addWidget(self.coord_label)
+        # 将地图和坐标放在上下分割中（垂直）
+        map_layout = QVBoxLayout()
+        map_layout.addWidget(self.map_canvas)
+        map_layout.addWidget(self.zoom_slider)
+        map_layout.addWidget(self.coord_label)
 
         widget = QWidget()
-        widget.setLayout(layout)
+        widget.setLayout(map_layout)
         return widget
 
     def create_layer_widget(self):
         self.layer_list = QListWidget()
+        self.layer_list.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.layer_list.customContextMenuRequested.connect(self.on_layer_context_menu)
+        self.layer_list.itemChanged.connect(self.on_layer_check_changed)
+        self.layer_list.itemDoubleClicked.connect(self.on_layer_double_clicked)
+
         layout = QVBoxLayout()
         layout.addWidget(QLabel("图层列表"))
         layout.addWidget(self.layer_list)
@@ -110,22 +118,35 @@ class MainWindow(QMainWindow):
         image_widget = self.create_image_display_widget()
         log_widget = self.create_log_widget()
 
-        right_splitter = QSplitter(Qt.Vertical)
-        right_splitter.addWidget(image_widget)
-        right_splitter.addWidget(log_widget)
-        right_splitter.setStretchFactor(0, 7)
-        right_splitter.setStretchFactor(1, 3)
-        right_splitter.setHandleWidth(2)
+        # 图像显示区 + 日志区 = 垂直分割
+        vertical_splitter = QSplitter(Qt.Vertical)
+        vertical_splitter.addWidget(image_widget)
+        vertical_splitter.addWidget(log_widget)
+        vertical_splitter.setStretchFactor(0, 7)
+        vertical_splitter.setStretchFactor(1, 3)
+        vertical_splitter.setHandleWidth(3)
 
+        # 左侧图层区 + 右侧显示区 = 水平分割
         main_splitter = QSplitter(Qt.Horizontal)
         main_splitter.addWidget(layer_widget)
-        main_splitter.addWidget(right_splitter)
+        main_splitter.addWidget(vertical_splitter)
         main_splitter.setStretchFactor(0, 2)
         main_splitter.setStretchFactor(1, 8)
-        main_splitter.setHandleWidth(2)
+        main_splitter.setHandleWidth(3)
 
+        # ✅ 设置样式（不重新创建 splitter，而是设置样式）
+        splitter_style = '''
+            QSplitter::handle {
+                background-color: #bbbbbb;
+            }
+            '''
+        main_splitter.setStyleSheet(splitter_style)
+        vertical_splitter.setStyleSheet(splitter_style)
+
+        # 应用到界面
         container = QWidget()
         layout = QHBoxLayout()
+        layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(main_splitter)
         container.setLayout(layout)
         self.setCentralWidget(container)
@@ -155,13 +176,23 @@ class MainWindow(QMainWindow):
         file_menu.addMenu(las_convert_menu)
 
         photogrammetry_menu = QMenu("摄影测量与遥感", self)
-        merge_shp_action = QAction("合并Shapefile（待实现）", self)
-        merge_shp_action.setEnabled(False)
-        photogrammetry_menu.addAction(merge_shp_action)
+
         # 正射影像按钮
         orthorectify_action = QAction("正射影像", self)
         orthorectify_action.triggered.connect(self.show_orthorectify_dialog)
         photogrammetry_menu.addAction(orthorectify_action)
+        # 添加SHP子菜单
+        shp_menu = QMenu("SHP", self)
+        # 合并Shapefile（未实现)
+        merge_shp_action = QAction("合并Shapefile（待实现）", self)
+        merge_shp_action.setEnabled(False)
+        shp_menu.addAction(merge_shp_action)
+        # 边界提取
+        boundary_action = QAction("边界SHP提取", self)
+        boundary_action.triggered.connect(self.show_extract_boundary_dialog)
+        shp_menu.addAction(boundary_action)
+
+        photogrammetry_menu.addMenu(shp_menu)
 
         menu_bar.addMenu(file_menu)
         menu_bar.addMenu(photogrammetry_menu)
@@ -299,7 +330,11 @@ class MainWindow(QMainWindow):
         if pixmap and transform:
             self.map_canvas.add_layer(name, pixmap, transform)
             self.map_canvas.fitInView(self.map_canvas.scene.itemsBoundingRect(), Qt.KeepAspectRatio)
-            self.layer_list.addItem(name)
+            # self.layer_list.addItem(name)
+            item = QListWidgetItem(name)
+            item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
+            item.setCheckState(Qt.Checked)
+            self.layer_list.addItem(item)
         else:
             self.append_log(f"❌ 地图图像加载失败: {filename}")
 
@@ -367,6 +402,19 @@ class MainWindow(QMainWindow):
     def append_log(self, msg: str):
         if hasattr(self, "log_output") and self.log_output:
             self.log_output.append(msg)
+
+            # 限制最大行数，超出则删除前面的内容
+            max_lines = 1000
+            if self.log_output.document().blockCount() > max_lines:
+                cursor = self.log_output.textCursor()
+                cursor.movePosition(QtGui.QTextCursor.Start)
+                cursor.select(QtGui.QTextCursor.BlockUnderCursor)
+                cursor.removeSelectedText()
+                cursor.deleteChar()
+
+            self.log_output.moveCursor(QtGui.QTextCursor.End)
+            self.log_output.ensureCursorVisible()
+
         self.function_log_buffer.append(msg)
 
     def closeEvent(self, event):
@@ -500,3 +548,57 @@ class MainWindow(QMainWindow):
 
             if self.total_tasks== 0:
                 self.append_log("⚠️ 未找到可处理的影像")
+
+    def on_layer_check_changed(self, item):
+        name = item.text()
+        visible = item.checkState() == Qt.Checked
+        self.map_canvas.set_layer_visible(name, visible)
+
+    def on_layer_double_clicked(self, item):
+        name = item.text()
+        self.map_canvas.center_on_layer(name)
+
+    def on_layer_context_menu(self, pos):
+        item = self.layer_list.itemAt(pos)
+        if item:
+            name = item.text()
+            menu = QMenu(self)
+            delete_action = menu.addAction("删除图层")
+            action = menu.exec_(self.layer_list.mapToGlobal(pos))
+            if action == delete_action:
+                self.map_canvas.remove_layer(name)
+                self.layer_list.takeItem(self.layer_list.row(item))
+
+    def show_extract_boundary_dialog(self):
+        if not self.check_project_ready("边界SHP提取"):
+            return
+        default_save = os.path.join(self.project_root, "boundary")
+        dialog = ExtractBoundaryDialog(default_save, self.extract_boundaries, self)
+        dialog.exec_()
+
+    def extract_boundaries(self, in_dir, out_dir):
+        os.makedirs(out_dir, exist_ok=True)
+        self.append_log(f"📦 正在批量提取 TIFF 边界：{in_dir} → {out_dir}")
+
+        suffixes = ('.tif', '.tiff', '.TIF', '.TIFF')
+        files = [f for f in os.listdir(in_dir) if f.endswith(suffixes)]
+
+        self.boundary_total = len(files)
+        self.boundary_done = 0
+        self.thread_pool = QThreadPool.globalInstance()
+
+        for f in files:
+            input_path = os.path.join(in_dir, f)
+            name, _ = os.path.splitext(f)
+            output_path = os.path.join(out_dir, f"{name}.shp")
+
+            task = ExtractBoundaryTask(input_path, output_path)
+            task.signals.finished.connect(self.on_boundary_done)
+            self.thread_pool.start(task)
+
+    def on_boundary_done(self, msg):
+        self.append_log(msg)
+        self.boundary_done += 1
+        if self.boundary_done == self.boundary_total:
+            self.append_log("🎉 所有边界提取任务完成！")
+
