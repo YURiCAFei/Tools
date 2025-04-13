@@ -58,7 +58,6 @@ class LayerManager:
         base = checked[0].copy()
         painter = QPainter(base)
         for layer in checked[1:]:
-            painter.setOpacity(0.5)
             painter.drawPixmap(0, 0, layer)
         painter.end()
         return base

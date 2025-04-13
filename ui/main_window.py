@@ -2,11 +2,12 @@ import os
 import datetime
 
 from PyQt5.QtWidgets import QMainWindow, QWidget, QLabel, QTextEdit, QListWidget, QVBoxLayout, QHBoxLayout, QSlider, \
-    QFileDialog, QToolBar, QAction, QListWidgetItem, QMenuBar, QMenu, QDialog, QProgressBar, QPushButton, QSizePolicy, \
+    QFileDialog, QAction, QListWidgetItem, QMenuBar, QMenu, QDialog, QProgressBar, QPushButton, QSizePolicy, \
     QSplitter, QMessageBox
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QPixmap
 
+from ui.orthorectify_dialog import OrthorectifyDialog
 from utils.decompress_worker import DecompressWorker
 from utils.image_loader import ImageLoader
 from utils.layer_manager import LayerManager
@@ -15,6 +16,7 @@ from utils.file_process import decompress_process
 from ui.decompress_dialog import DecompressDialog
 from ui.satmap2gp_dialog import Satmap2GPDialog
 from utils.Satmap2GPlidar import merge_csv_to_txt
+from utils.orthorectify_worker import OrthoRectifyWorker
 from utils.satmap2gp_worker import Satmap2GPWorker
 from ui.lidar_downsample_dialog import LidarDownsampleDialog
 from utils.downsample_worker import DownsampleWorker
@@ -26,24 +28,19 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("工具软件")
         self.resize(1000, 600)
 
-        # 初始化状态容器
         self.transform = [None]
         self.crs = [None]
         self.scale_factor = 1.0
 
-        # 初始化 UI 元素
         self.init_widgets()
         self.init_menu_toolbar()
 
-        # 初始化图层管理器
         self.layer_manager = LayerManager(self.layer_list, self.render_combined_image)
 
-        # 工程相关
         self.project_root = None
         self.project_log_file = None
         self.project_start_time = None
         self.function_log_buffer = []
-        self.init_project_button()
 
     def create_image_display_widget(self):
         self.image_label = QLabel()
@@ -85,9 +82,9 @@ class MainWindow(QMainWindow):
         return widget
 
     def create_log_widget(self):
-        self.cancel_button = QPushButton("取消解压")
+        self.cancel_button = QPushButton("取消任务")
         self.cancel_button.setVisible(False)
-        self.cancel_button.clicked.connect(self.cancel_decompression)
+        self.cancel_button.clicked.connect(self.cancel_current_task)
 
         self.log_output = QTextEdit()
         self.log_output.setReadOnly(True)
@@ -127,60 +124,64 @@ class MainWindow(QMainWindow):
         container.setLayout(layout)
         self.setCentralWidget(container)
 
-        self.setStyleSheet("""
-                QSplitter::handle {
-                    background-color: #888888;
-                    border: 1px solid #666666;
-                    margin: 0px;
-                }
-                QSplitter::handle:horizontal {
-                    height: 2px;
-                }
-                QSplitter::handle:vertical {
-                    width: 2px;
-                }
-            """)
-
-    def init_project_button(self):
-        new_project_action = QAction("新建工程", self)
-        new_project_action.triggered.connect(self.select_project_folder)
-        self.menuBar().addAction(new_project_action)
-
     def init_menu_toolbar(self):
         menu_bar = QMenuBar(self)
-        # 文件处理菜单，用于一些基本的文件处理
-        file_menu = QMenu("文件处理", self)
 
+        project_menu = QMenu("新建工程", self)
+        new_project_action = QAction("选择工程目录", self)
+        new_project_action.triggered.connect(self.select_project_folder)
+        project_menu.addAction(new_project_action)
+        menu_bar.addMenu(project_menu)
+
+        file_menu = QMenu("文件处理", self)
         extract_action = QAction("解压", self)
         extract_action.triggered.connect(self.show_decompress_dialog)
         file_menu.addAction(extract_action)
 
-        # 激光格式转换，实现激光格式转换
         las_convert_menu = QMenu("激光数据处理", self)
-
         satmap2gp_action = QAction("Satmap2GP", self)
-        # satmap2gp_action.setEnabled(False)
         satmap2gp_action.triggered.connect(self.show_satmap2gp_dialog)
         las_convert_menu.addAction(satmap2gp_action)
 
         downsample_action = QAction("激光点抽稀", self)
-        # downsample_action.setEnabled(False)
         downsample_action.triggered.connect(self.show_downsample_dialog)
         las_convert_menu.addAction(downsample_action)
+        file_menu.addMenu(las_convert_menu)
 
-        # 摄影测量与遥感菜单
         photogrammetry_menu = QMenu("摄影测量与遥感", self)
-
         merge_shp_action = QAction("合并Shapefile（待实现）", self)
         merge_shp_action.setEnabled(False)
         photogrammetry_menu.addAction(merge_shp_action)
+        # 正射影像按钮
+        orthorectify_action = QAction("正射影像", self)
+        orthorectify_action.triggered.connect(self.show_orthorectify_dialog)
+        photogrammetry_menu.addAction(orthorectify_action)
 
-        file_menu.addMenu(las_convert_menu)
-
-        # 为menu_bar添加菜单
         menu_bar.addMenu(file_menu)
         menu_bar.addMenu(photogrammetry_menu)
         self.setMenuBar(menu_bar)
+
+    def cancel_current_task(self):
+        if hasattr(self, "decompress_thread") and self.decompress_thread.isRunning():
+            self.decompress_thread.stop()
+            self.append_log("🟥 解压任务已请求终止")
+            self.cancel_button.setEnabled(False)
+
+        if hasattr(self, "downsample_thread") and self.downsample_thread.isRunning():
+            self.downsample_thread.stop()
+            self.append_log("🟥 抽稀任务已请求终止")
+            self.cancel_button.setEnabled(False)
+
+        if hasattr(self, "ortho_futures"):
+            cancel_count = 0
+            for fut in self.ortho_futures:
+                if fut.cancel():
+                    cancel_count += 1
+            if cancel_count > 0:
+                self.append_log("🟥 已取消 {cancel_count} 个尚未开始的正射任务")
+            else:
+                self.append_log("⚠️ 当前正射任务已开始执行，无法中断")
+            self.cancel_button.setEnabled(False)
 
     def render_combined_image(self):
         combined = self.layer_manager.render_combined()
@@ -222,7 +223,6 @@ class MainWindow(QMainWindow):
                 return
 
             self.append_log("🟡 解压开始...")
-            self.progress_bar.setValue(0)
             self.cancel_button.setVisible(True)
             self.cancel_button.setEnabled(True)
 
@@ -234,16 +234,10 @@ class MainWindow(QMainWindow):
             self.decompress_thread.stopped.connect(self.on_decompression_stopped)
             self.decompress_thread.start()
 
-    def cancel_decompression(self):
-        if hasattr(self, 'decompress_thread') and self.decompress_thread.isRunning():
-            self.decompress_thread.stop()
-            self.cancel_button.setEnabled(False)
-
     def on_decompression_finished(self):
         self.append_log("✅ 解压完成")
         self.cancel_button.setEnabled(False)
         self.cancel_button.setVisible(False)
-
 
     def on_decompression_stopped(self):
         self.append_log("🟥 解压被用户取消")
@@ -284,6 +278,8 @@ class MainWindow(QMainWindow):
         self.zoom_slider.setValue(new_value)
 
     def show_downsample_dialog(self):
+        if not self.check_project_ready("激光点抽稀"):
+            return
         dialog = LidarDownsampleDialog(self)
         if dialog.exec_():
             inputs = dialog.get_inputs()
@@ -293,10 +289,9 @@ class MainWindow(QMainWindow):
             output_path = inputs["output_path"]
             filename = inputs["filename"]
 
-            if not self.check_project_ready("激光点抽稀"):
-                return
-
             self.append_log("🟡 开始激光点抽稀任务...")
+            self.cancel_button.setVisible(True)
+            self.cancel_button.setEnabled(True)
 
             self.downsample_thread = DownsampleWorker(
                 input_path=input_path,
@@ -309,6 +304,16 @@ class MainWindow(QMainWindow):
             self.downsample_thread.finished.connect(self.on_downsample_finished)
             self.downsample_thread.stopped.connect(self.on_downsample_stopped)
             self.downsample_thread.start()
+
+    def on_downsample_finished(self):
+        self.append_log("✅ 抽稀完成")
+        self.cancel_button.setEnabled(False)
+        self.cancel_button.setVisible(False)
+
+    def on_downsample_stopped(self):
+        self.append_log("🟥 抽稀被取消")
+        self.cancel_button.setEnabled(False)
+        self.cancel_button.setVisible(False)
 
     def select_project_folder(self):
         path = QFileDialog.getExistingDirectory(self, "选择工程文件夹")
@@ -331,15 +336,11 @@ class MainWindow(QMainWindow):
         self.function_log_buffer.append(msg)
 
     def closeEvent(self, event):
-        # 检查是否有后台线程在运行
         active_tasks = []
-
         if hasattr(self, "decompress_thread") and self.decompress_thread.isRunning():
             active_tasks.append("解压")
-
         if hasattr(self, "downsample_thread") and self.downsample_thread.isRunning():
             active_tasks.append("激光点抽稀")
-
         if active_tasks:
             task_list = "、".join(active_tasks)
             try:
@@ -357,8 +358,6 @@ class MainWindow(QMainWindow):
                 print(f"[关闭提示失败] {e}")
                 event.ignore()
                 return
-
-        # 安全写入日志
         try:
             if self.project_log_file and self.function_log_buffer:
                 with open(self.project_log_file, 'w', encoding='utf-8') as f:
@@ -366,12 +365,84 @@ class MainWindow(QMainWindow):
         except Exception as e:
             print(f"[写入日志失败] {e}")
 
+        # 清理正射影像线程池
+        try:
+            if hasattr(self, "executor"):
+                self.executor.shutdown(wait=False, cancel_futures=True)
+                self.append_log("🛑 正射线程池已关闭")
+        except Exception as e:
+            print(f"[关闭线程池失败] {e}")
         super().closeEvent(event)
 
-    def on_downsample_finished(self):
-        self.append_log("✅ 抽稀完成")
+    def show_orthorectify_dialog(self):
+        import concurrent.futures
+        from utils.orthorectify_logic import process_single_image, MAX_WORKERS
 
-    def on_downsample_stopped(self):
-        self.append_log("🟥 抽稀被取消")
+        if not self.check_project_ready("正射影像"):
+            return
 
+        dialog = OrthorectifyDialog(self)
+        if hasattr(self, 'project_root') and self.project_root:
+            default_output = os.path.join(self.project_root, "orthorectified")
+            os.makedirs(default_output, exist_ok=True)
+            dialog.output_edit.setText(default_output)
 
+        if dialog.exec_():
+            input_dir, output_dir = dialog.get_paths()
+            if not os.path.isdir(input_dir) or not os.path.isdir(output_dir):
+                self.append_log("❌ 输入或输出目录无效")
+                return
+
+            self.append_log(f"📂 正射输入目录: {input_dir}")
+            self.append_log(f"📁 正射输出目录: {output_dir}")
+            self.cancel_button.setVisible(True)
+            self.cancel_button.setEnabled(False)  # 当前不支持取消线程池任务
+
+            self.ortho_results = []
+            self.ortho_futures = []
+            self.executor = concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS)
+
+            def log_wrapper(msg):
+                self.append_log(msg)
+
+            def done_callback(future):
+                try:
+                    output_path = future.result()
+                    self.ortho_results.append(output_path)
+
+                    from utils.image_loader import ImageLoader
+
+                    def on_loaded(filename, pixmap):
+                        if pixmap:
+                            self.layer_manager.add_layer(os.path.basename(filename), pixmap)
+                            self.render_combined_image()
+                        else:
+                            self.append_log(f"❌ 图像加载失败: {filename}")
+
+                    ImageLoader.load_async(output_path, self.transform, self.crs, on_loaded)
+
+                except Exception as e:
+                    self.append_log(f"❌ 正射异常: {e}")
+                finally:
+                    if len(self.ortho_results) == total_tasks:
+                        self.append_log("✅ 所有正射影像处理完成")
+                        self.cancel_button.setEnabled(False)
+                        self.cancel_button.setVisible(False)
+
+            total_tasks = 0
+            for fname in os.listdir(input_dir):
+                if fname.lower().endswith(('.tif', '.tiff', '.TIF', '.TIFF')):
+                    base = os.path.splitext(fname)[0]
+                    image_path = os.path.join(input_dir, fname)
+                    rpc_path = os.path.join(input_dir, base + '_rpc.txt')
+                    if os.path.exists(rpc_path):
+                        future = self.executor.submit(process_single_image, image_path, rpc_path, output_dir,
+                                                      log_wrapper)
+                        future.add_done_callback(done_callback)
+                        self.ortho_futures.append(future)
+                        total_tasks += 1
+                    else:
+                        self.append_log(f"⚠️ 缺少 RPC 文件: {base}_rpc.txt")
+
+            if total_tasks == 0:
+                self.append_log("⚠️ 未找到可处理的影像")

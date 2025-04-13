@@ -28,18 +28,15 @@ class ImageLoader:
     thread_pool = QThreadPool()
 
     @staticmethod
+    def normalize_to_uint8(arr):
+        arr = np.nan_to_num(arr)
+        p2, p98 = np.percentile(arr, (2, 98))
+        arr = np.clip(arr, p2, p98)
+        arr = (arr - arr.min()) / (arr.max() - arr.min() + 1e-6) * 255
+        return arr.astype(np.uint8)
+
+    @staticmethod
     def load_image(file_name, transform_container, crs_container):
-        """
-        加载图像并返回 QPixmap 对象（用于主线程或线程任务中）。
-
-        参数：
-            file_name: 文件路径
-            transform_container: 用于传递 transform（仿射矩阵）
-            crs_container: 用于传递 crs（坐标系统）
-
-        返回：
-            QPixmap 或 None（加载失败）
-        """
         try:
             if file_name.lower().endswith(('tif', 'tiff')):
                 with rasterio.open(file_name, "r") as src:
@@ -47,27 +44,35 @@ class ImageLoader:
                         transform_container[0] = src.transform
                         crs_container[0] = src.crs
 
+                    # 使用金字塔 overviews 或默认缩放
                     ovr = src.overviews(1)
                     if ovr:
                         decim = ovr[min(len(ovr)-1, 2)]
                         img = src.read(
-                            out_dtype='uint8',
                             out_shape=(src.count, src.height // decim, src.width // decim),
                             resampling=Resampling.nearest
                         )
                     else:
-                        img = src.read(out_dtype='uint8', resampling=Resampling.bilinear)
+                        decim = 4  # fallback 缩小比例
+                        img = src.read(
+                            out_shape=(src.count, src.height // decim, src.width // decim),
+                            resampling=Resampling.bilinear
+                        )
 
+                    # 格式转换
                     if src.count >= 3:
-                        img = img[:3].transpose(1, 2, 0)
+                        r = ImageLoader.normalize_to_uint8(img[0])
+                        g = ImageLoader.normalize_to_uint8(img[1])
+                        b = ImageLoader.normalize_to_uint8(img[2])
+                        rgb = np.stack([r, g, b], axis=-1)
                     elif src.count == 1:
-                        band = img[0]
-                        img = np.stack((band,) * 3, axis=-1)
+                        gray = ImageLoader.normalize_to_uint8(img[0])
+                        rgb = np.stack([gray] * 3, axis=-1)
                     else:
                         return None
 
-                    h, w, c = img.shape
-                    qimg = QImage(img.tobytes(), w, h, c * w, QImage.Format_RGB888)
+                    h, w, c = rgb.shape
+                    qimg = QImage(rgb.tobytes(), w, h, c * w, QImage.Format_RGB888)
                     return QPixmap.fromImage(qimg)
             else:
                 return QPixmap(file_name)

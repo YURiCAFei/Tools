@@ -16,7 +16,9 @@ class LidarDownsampleDialog(QDialog):
         # 自动带入默认工程输出路径（如果设置）
         if parent and hasattr(parent, "project_root") and parent.project_root:
             # self.output_edit.setText(parent.project_root)
-            self.output_edit.setText(os.path.join(parent.project_root, "dowmsampled_lidar"))
+            save_path = os.path.join(parent.project_root, "dowmsampled_lidar")
+            os.makedirs(save_path, exist_ok=True)
+            self.output_edit.setText(save_path)
 
     def init_ui(self):
         layout = QVBoxLayout()

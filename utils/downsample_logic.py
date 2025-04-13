@@ -41,10 +41,10 @@ def save_points_to_txt(points, output_path, log_callback=None, stop_check=None):
                 log_callback("🟥 中止写入 .txt")
                 return
             f.write(f"{i+1}\t{p[0]}\t{p[1]}\t{p[2]}\n")
-            if log_callback:
-                log_callback(f"✏️ 写入点 {i+1}: {p[0]:.6f}, {p[1]:.6f}, {p[2]:.2f}")
-                if (i + 1) % 1000 == 0:
-                    log_callback(f"📌 已写入 {i+1} 个点...")
+            if log_callback and (i + 1) % 1000 == 0:
+                log_callback(f"📌 已写入 {i + 1} 个点...")
+    if log_callback:
+        log_callback(f"✅ 共写入 {len(points)} 个点")
 
 def save_points_to_csv(points, output_path, log_callback=None, stop_check=None):
     with open(output_path, 'w', encoding='utf-8', newline='') as f:
@@ -55,10 +55,10 @@ def save_points_to_csv(points, output_path, log_callback=None, stop_check=None):
                 log_callback("🟥 中止写入 .csv")
                 return
             writer.writerow(p)
-            if log_callback:
-                log_callback(f"✏️ 写入点 {i+1}: {p[0]:.6f}, {p[1]:.6f}, {p[2]:.2f}")
-                if (i + 1) % 1000 == 0:
-                    log_callback(f"📌 已写入 {i+1} 个点...")
+            if log_callback and (i + 1) % 1000 == 0:
+                log_callback(f"📌 已写入 {i + 1} 个点...")
+    if log_callback:
+        log_callback(f"✅ 共写入 {len(points)} 个点")
 
 def downsample_by_ratio(points, ratio):
     k = int(len(points) * ratio)
@@ -94,56 +94,99 @@ def downsample_by_kmeans(points, k):
         result.append(points[idx])
     return result
 
-def process_downsample(method, param, input_path, output_path, filename,
-                       log_callback=print, stop_check=None):
-    all_points = []
-    input_files = [f for f in os.listdir(input_path) if f.endswith((".csv", ".txt"))]
+# def process_downsample(method, param, input_path, output_path, filename,
+#                        log_callback=print, stop_check=None):
+#     all_points = []
+#     input_files = [f for f in os.listdir(input_path) if f.endswith((".csv", ".txt"))]
+#
+#     if not input_files:
+#         log_callback("❌ 输入目录下无有效 .csv 或 .txt 文件")
+#         return
+#
+#     for file in input_files:
+#         if stop_check and stop_check():
+#             log_callback("🟥 抽稀中断（在文件级别）")
+#             return
+#
+#         full_path = os.path.join(input_path, file)
+#         log_callback(f"📥 正在读取: {file}")
+#
+#         if file.endswith(".csv"):
+#             points, fmt = load_points_from_csv(full_path)
+#         else:
+#             points, fmt = load_points_from_txt(full_path)
+#
+#         if not points:
+#             log_callback(f"⚠️ 文件 {file} 无有效点，跳过")
+#             continue
+#
+#         try:
+#             if method == "ratio":
+#                 subset = downsample_by_ratio(points, float(param))
+#             elif method == "count":
+#                 subset = downsample_by_count(points, int(param))
+#             elif method == "grid":
+#                 subset = downsample_by_grid(points, float(param))
+#             elif method == "kmeans":
+#                 subset = downsample_by_kmeans(points, int(param))
+#             else:
+#                 log_callback(f"❌ 不支持的抽样方法: {method}")
+#                 continue
+#         except Exception as e:
+#             log_callback(f"❌ 抽样失败: {file} ({e})")
+#             continue
+#
+#         if stop_check and stop_check():
+#             log_callback("🟥 抽稀中断（在写入前）")
+#             return
+#
+#         output_file = os.path.join(output_path, filename + "_" + os.path.splitext(file)[0] + "." + fmt)
+#         if fmt == "csv":
+#             save_points_to_csv(subset, output_file, log_callback, stop_check)
+#         else:
+#             save_points_to_txt(subset, output_file, log_callback, stop_check)
+#
+#         log_callback(f"✅ 完成: {file} → {os.path.basename(output_file)} ({len(subset)} 点)")
 
-    if not input_files:
-        log_callback("❌ 输入目录下无有效 .csv 或 .txt 文件")
+def process_downsample_single_file(file_path, method, param, output_path, filename,
+                                   log_callback=print, stop_check=None):
+    import os
+
+    file = os.path.basename(file_path)
+    log_callback(f"📥 正在读取: {file}")
+
+    if file.endswith(".csv"):
+        points, fmt = load_points_from_csv(file_path)
+    else:
+        points, fmt = load_points_from_txt(file_path)
+
+    if not points:
+        log_callback(f"⚠️ 文件 {file} 无有效点，跳过")
         return
 
-    for file in input_files:
-        if stop_check and stop_check():
-            log_callback("🟥 抽稀中断（在文件级别）")
-            return
-
-        full_path = os.path.join(input_path, file)
-        log_callback(f"📥 正在读取: {file}")
-
-        if file.endswith(".csv"):
-            points, fmt = load_points_from_csv(full_path)
+    try:
+        if method == "ratio":
+            subset = downsample_by_ratio(points, float(param))
+        elif method == "count":
+            subset = downsample_by_count(points, int(param))
+        elif method == "grid":
+            subset = downsample_by_grid(points, float(param))
+        elif method == "kmeans":
+            subset = downsample_by_kmeans(points, int(param))
         else:
-            points, fmt = load_points_from_txt(full_path)
-
-        if not points:
-            log_callback(f"⚠️ 文件 {file} 无有效点，跳过")
-            continue
-
-        try:
-            if method == "ratio":
-                subset = downsample_by_ratio(points, float(param))
-            elif method == "count":
-                subset = downsample_by_count(points, int(param))
-            elif method == "grid":
-                subset = downsample_by_grid(points, float(param))
-            elif method == "kmeans":
-                subset = downsample_by_kmeans(points, int(param))
-            else:
-                log_callback(f"❌ 不支持的抽样方法: {method}")
-                continue
-        except Exception as e:
-            log_callback(f"❌ 抽样失败: {file} ({e})")
-            continue
-
-        if stop_check and stop_check():
-            log_callback("🟥 抽稀中断（在写入前）")
+            log_callback(f"❌ 不支持的抽样方法: {method}")
             return
+    except Exception as e:
+        log_callback(f"❌ 抽样失败: {file} ({e})")
+        return
 
-        output_file = os.path.join(output_path, filename + "_" + os.path.splitext(file)[0] + "." + fmt)
-        if fmt == "csv":
-            save_points_to_csv(subset, output_file, log_callback, stop_check)
-        else:
-            save_points_to_txt(subset, output_file, log_callback, stop_check)
+    output_file = os.path.join(output_path, filename + "_" + os.path.splitext(file)[0] + "." + fmt)
+    if fmt == "csv":
+        save_points_to_csv(subset, output_file, log_callback, stop_check)
+    else:
+        save_points_to_txt(subset, output_file, log_callback, stop_check)
 
-        log_callback(f"✅ 完成: {file} → {os.path.basename(output_file)} ({len(subset)} 点)")
+    log_callback(f"✅ 完成: {file} → {os.path.basename(output_file)} ({len(subset)} 点)")
+
+
+
