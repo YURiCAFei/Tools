@@ -1,12 +1,14 @@
 import os
-from PyQt5.QtWidgets import QDialog, QLabel, QLineEdit, QPushButton, QVBoxLayout, QHBoxLayout, QFileDialog
-
+from PyQt5.QtWidgets import (
+    QDialog, QLabel, QLineEdit, QPushButton, QVBoxLayout,
+    QHBoxLayout, QFileDialog, QComboBox
+)
 
 class OrthorectifyDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("正射影像处理")
-        self.resize(500, 200)
+        self.resize(500, 250)
         self.init_ui()
 
     def init_ui(self):
@@ -30,6 +32,11 @@ class OrthorectifyDialog(QDialog):
         output_row.addWidget(self.output_edit)
         output_row.addWidget(output_btn)
 
+        # 插值方式选择
+        interp_label = QLabel("插值方式：")
+        self.interp_combo = QComboBox()
+        self.interp_combo.addItems(["双线性插值 (bilinear)", "三次卷积插值 (cubic)"])
+
         # 确定/取消按钮
         ok_btn = QPushButton("确定")
         cancel_btn = QPushButton("取消")
@@ -44,6 +51,8 @@ class OrthorectifyDialog(QDialog):
         layout.addLayout(input_row)
         layout.addWidget(output_label)
         layout.addLayout(output_row)
+        layout.addWidget(interp_label)
+        layout.addWidget(self.interp_combo)
         layout.addLayout(btn_row)
 
         self.setLayout(layout)
@@ -60,3 +69,9 @@ class OrthorectifyDialog(QDialog):
 
     def get_paths(self):
         return self.input_edit.text().strip(), self.output_edit.text().strip()
+
+    def get_interp_method(self):
+        if self.interp_combo.currentIndex() == 0:
+            return "bilinear"
+        else:
+            return "cubic"

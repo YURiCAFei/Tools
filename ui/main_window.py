@@ -471,14 +471,17 @@ class MainWindow(QMainWindow):
 
         if dialog.exec_():
             input_dir, output_dir = dialog.get_paths()
+            interp_method = dialog.get_interp_method()
+
             if not os.path.isdir(input_dir) or not os.path.isdir(output_dir):
                 self.append_log("❌ 输入或输出目录无效")
                 return
 
             self.append_log(f"📂 正射输入目录: {input_dir}")
             self.append_log(f"📁 正射输出目录: {output_dir}")
+            self.append_log(f"🔧 插值方式: {interp_method}")
             self.cancel_button.setVisible(True)
-            self.cancel_button.setEnabled(False)  # 当前不支持取消线程池任务
+            self.cancel_button.setEnabled(False)
 
             self.ortho_results = []
             self.ortho_futures = []
@@ -486,28 +489,6 @@ class MainWindow(QMainWindow):
 
             def log_wrapper(msg):
                 self.append_log(msg)
-
-
-            # def update_map_layer(self, filename, pixmap, transform):
-            #     name = os.path.basename(filename)
-            #     print(f"[UI更新] 图层名: {name}")
-            #
-            #     if pixmap:
-            #         print(f"[UI更新] pixmap 尺寸: {pixmap.width()}x{pixmap.height()}")
-            #     else:
-            #         print(f"[UI更新] pixmap 为空！")
-            #
-            #     if transform:
-            #         print(f"[UI更新] transform 左上角: ({transform.c}, {transform.f})")
-            #     else:
-            #         print(f"[UI更新] transform 为 None！")
-            #
-            #     if pixmap and transform:
-            #         self.map_canvas.add_layer(name, pixmap, transform)
-            #         self.map_canvas.fitInView(self.map_canvas.scene.itemsBoundingRect(), Qt.KeepAspectRatio)
-            #         self.layer_list.addItem(name)
-            #     else:
-            #         self.append_log(f"❌ 地图图像加载失败: {filename}")
 
             def done_callback(future):
                 try:
@@ -518,8 +499,7 @@ class MainWindow(QMainWindow):
 
                     def on_loaded(filename, pixmap, transform):
                         print(f"[加载回调] 文件: {filename}")
-                        print(f"[回调内容] pixmap: {pixmap is not None}, transform: {transform is not None}")
-                        self.update_map_layer(filename, pixmap, transform)  # ✅ 改为直接调用，避免 lambda 闭包失效
+                        self.update_map_layer(filename, pixmap, transform)
 
                     ImageLoader.load_async_with_transform(output_path, on_loaded)
 
@@ -531,22 +511,28 @@ class MainWindow(QMainWindow):
                         self.cancel_button.setEnabled(False)
                         self.cancel_button.setVisible(False)
 
-            self.total_tasks= 0
+            self.total_tasks = 0
             for fname in os.listdir(input_dir):
                 if fname.lower().endswith(('.tif', '.tiff', '.TIF', '.TIFF')):
                     base = os.path.splitext(fname)[0]
                     image_path = os.path.join(input_dir, fname)
                     rpc_path = os.path.join(input_dir, base + '_rpc.txt')
                     if os.path.exists(rpc_path):
-                        future = self.executor.submit(process_single_image, image_path, rpc_path, output_dir,
-                                                      log_wrapper)
+                        future = self.executor.submit(
+                            process_single_image,
+                            image_path,
+                            rpc_path,
+                            output_dir,
+                            log_wrapper,
+                            interp_method  # ✅ 加入插值参数
+                        )
                         future.add_done_callback(done_callback)
                         self.ortho_futures.append(future)
-                        self.total_tasks+= 1
+                        self.total_tasks += 1
                     else:
                         self.append_log(f"⚠️ 缺少 RPC 文件: {base}_rpc.txt")
 
-            if self.total_tasks== 0:
+            if self.total_tasks == 0:
                 self.append_log("⚠️ 未找到可处理的影像")
 
     def on_layer_check_changed(self, item):
