@@ -3,16 +3,13 @@ from PyQt5.QtGui import QImage, QPixmap
 from PyQt5.QtCore import QRunnable, QThreadPool, QObject, pyqtSignal
 import rasterio
 from rasterio.enums import Resampling
+import traceback
+import threading
 
 class ImageLoadResult(QObject):
-    """ 信号结果对象，用于线程完成通知。"""
-    finished = pyqtSignal(str, QPixmap)
+    finished = pyqtSignal(str, QPixmap, object)  # 增加 transform 输出
 
 class ImageLoaderWorker(QRunnable):
-    """
-    图像加载线程任务（基于QRunnable）。
-    支持 GeoTIFF 金字塔自动选择最佳缩放层级以提升加载速度。
-    """
     def __init__(self, file_name, transform_container, crs_container, callback):
         super().__init__()
         self.file_name = file_name
@@ -21,8 +18,8 @@ class ImageLoaderWorker(QRunnable):
         self.callback = callback
 
     def run(self):
-        pixmap = ImageLoader.load_image(self.file_name, self.transform_container, self.crs_container)
-        self.callback(self.file_name, pixmap)
+        pixmap, transform = ImageLoader.load_image(self.file_name, self.transform_container, self.crs_container)
+        self.callback(self.file_name, pixmap, transform)
 
 class ImageLoader:
     thread_pool = QThreadPool()
@@ -44,7 +41,8 @@ class ImageLoader:
                         transform_container[0] = src.transform
                         crs_container[0] = src.crs
 
-                    # 使用金字塔 overviews 或默认缩放
+                    transform = src.transform
+
                     ovr = src.overviews(1)
                     if ovr:
                         decim = ovr[min(len(ovr)-1, 2)]
@@ -53,13 +51,12 @@ class ImageLoader:
                             resampling=Resampling.nearest
                         )
                     else:
-                        decim = 4  # fallback 缩小比例
+                        decim = 4
                         img = src.read(
                             out_shape=(src.count, src.height // decim, src.width // decim),
                             resampling=Resampling.bilinear
                         )
 
-                    # 格式转换
                     if src.count >= 3:
                         r = ImageLoader.normalize_to_uint8(img[0])
                         g = ImageLoader.normalize_to_uint8(img[1])
@@ -69,22 +66,74 @@ class ImageLoader:
                         gray = ImageLoader.normalize_to_uint8(img[0])
                         rgb = np.stack([gray] * 3, axis=-1)
                     else:
-                        return None
+                        print(f"[图像加载失败] 通道数不足: {file_name}")
+                        return None, None
 
                     h, w, c = rgb.shape
                     qimg = QImage(rgb.tobytes(), w, h, c * w, QImage.Format_RGB888)
-                    return QPixmap.fromImage(qimg)
+                    return QPixmap.fromImage(qimg), transform
             else:
-                return QPixmap(file_name)
+                return QPixmap(file_name), None
         except Exception as e:
-            print(f"读取图像失败: {file_name} → {e}")
-            return None
+            print(f"[图像加载异常] {file_name}: {str(e)}")
+            traceback.print_exc()
+            return None, None
 
     @staticmethod
-    def load_async(file_name, transform_container, crs_container, callback):
-        """
-        异步加载图像，避免卡顿。
-        callback: (file_name, QPixmap) 回调
-        """
-        worker = ImageLoaderWorker(file_name, transform_container, crs_container, callback)
-        ImageLoader.thread_pool.start(worker)
+    def load_async_with_transform(file_name, callback):
+        from threading import Thread
+
+        def task():
+            pix, trans = ImageLoader.load_image_with_transform(file_name)
+            callback(file_name, pix, trans)
+
+        Thread(target=task).start()
+
+    @staticmethod
+    def load_image_with_transform(file_name):
+        try:
+            print(f"[DEBUG] 开始尝试读取图像: {file_name}")
+            if file_name.lower().endswith(('tif', 'tiff')):
+                with rasterio.open(file_name, "r") as src:
+                    transform = src.transform
+                    print(f"[DEBUG] transform: {transform}")
+                    ovr = src.overviews(1)
+                    if ovr:
+                        decim = ovr[min(len(ovr) - 1, 2)]
+                        img = src.read(
+                            out_shape=(src.count, src.height // decim, src.width // decim),
+                            resampling=Resampling.nearest
+                        )
+                    else:
+                        decim = 4
+                        img = src.read(
+                            out_shape=(src.count, src.height // decim, src.width // decim),
+                            resampling=Resampling.bilinear
+                        )
+                    print(f"[DEBUG] rasterio 读取图像成功，shape: {img.shape}")
+
+                    if src.count >= 3:
+                        r = ImageLoader.normalize_to_uint8(img[0])
+                        g = ImageLoader.normalize_to_uint8(img[1])
+                        b = ImageLoader.normalize_to_uint8(img[2])
+                        rgb = np.stack([r, g, b], axis=-1)
+                    elif src.count == 1:
+                        gray = ImageLoader.normalize_to_uint8(img[0])
+                        rgb = np.stack([gray] * 3, axis=-1)
+                    else:
+                        print(f"[图像加载失败] 通道数不足: {file_name}")
+                        return None, None
+
+                    h, w, c = rgb.shape
+                    qimg = QImage(rgb.tobytes(), w, h, c * w, QImage.Format_RGB888)
+                    pixmap = QPixmap.fromImage(qimg)
+                    print(f"[DEBUG] 返回 pixmap: {pixmap is not None}, transform: {transform is not None}")
+                    return pixmap, transform
+            else:
+                print(f"[DEBUG] 不是TIFF文件，直接加载 QPixmap: {file_name}")
+                return QPixmap(file_name), None
+        except Exception as e:
+            print(f"[图像加载异常] {file_name}: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            return None, None

@@ -4,7 +4,7 @@ import datetime
 from PyQt5.QtWidgets import QMainWindow, QWidget, QLabel, QTextEdit, QListWidget, QVBoxLayout, QHBoxLayout, QSlider, \
     QFileDialog, QAction, QListWidgetItem, QMenuBar, QMenu, QDialog, QProgressBar, QPushButton, QSizePolicy, \
     QSplitter, QMessageBox
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui import QPixmap
 
 from ui.orthorectify_dialog import OrthorectifyDialog
@@ -20,6 +20,8 @@ from utils.orthorectify_worker import OrthoRectifyWorker
 from utils.satmap2gp_worker import Satmap2GPWorker
 from ui.lidar_downsample_dialog import LidarDownsampleDialog
 from utils.downsample_worker import DownsampleWorker
+from ui.map_canvas import MapViewWidget  # 新增地图显示器
+
 
 
 class MainWindow(QMainWindow):
@@ -35,7 +37,7 @@ class MainWindow(QMainWindow):
         self.init_widgets()
         self.init_menu_toolbar()
 
-        self.layer_manager = LayerManager(self.layer_list, self.render_combined_image)
+        self.layer_manager = LayerManager(self.layer_list, lambda : None)
 
         self.project_root = None
         self.project_log_file = None
@@ -43,13 +45,16 @@ class MainWindow(QMainWindow):
         self.function_log_buffer = []
 
     def create_image_display_widget(self):
-        self.image_label = QLabel()
-        self.image_label.setAlignment(Qt.AlignCenter)
-        self.image_label.setStyleSheet("border: 1px solid black; background-color: #f0f0f0;")
-        self.image_label.setMouseTracking(True)
-        self.image_label.mouseMoveEvent = self.mouse_move_event
-        self.image_label.wheelEvent = self.mouse_wheel_event
-        self.image_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        # self.image_label = QLabel()
+        # self.image_label.setAlignment(Qt.AlignCenter)
+        # self.image_label.setStyleSheet("border: 1px solid black; background-color: #f0f0f0;")
+        # self.image_label.setMouseTracking(True)
+        # self.image_label.mouseMoveEvent = self.mouse_move_event
+        # self.image_label.wheelEvent = self.mouse_wheel_event
+        # self.image_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+
+        self.map_canvas = MapViewWidget()
+        self.map_canvas.setMinimumSize(300, 300)
 
         self.zoom_slider = QSlider(Qt.Horizontal)
         self.zoom_slider.setMinimum(10)
@@ -63,7 +68,8 @@ class MainWindow(QMainWindow):
 
         layout = QVBoxLayout()
         layout.addWidget(QLabel("图片显示区"))
-        layout.addWidget(self.image_label)
+        # layout.addWidget(self.image_label)
+        layout.addWidget(self.map_canvas)
         layout.addWidget(self.zoom_slider)
         layout.addWidget(self.coord_label)
 
@@ -183,24 +189,29 @@ class MainWindow(QMainWindow):
                 self.append_log("⚠️ 当前正射任务已开始执行，无法中断")
             self.cancel_button.setEnabled(False)
 
-    def render_combined_image(self):
-        combined = self.layer_manager.render_combined()
-        if combined:
-            self.display_image(combined)
-        else:
-            self.image_label.clear()
-
-    def display_image(self, pixmap: QPixmap):
-        scaled = pixmap.scaled(self.image_label.size() * self.scale_factor, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-        self.image_label.setPixmap(scaled)
+    # def render_combined_image(self):
+    #     if not hasattr(self, "image_label") or self.image_label is None:
+    #         return  # QLabel 被注释或移除，直接跳过
+    #
+    #     combined = self.layer_manager.render_combined()
+    #     if combined:
+    #         self.display_image(combined)
+    #     else:
+    #         self.image_label.clear()
+    #
+    # def display_image(self, pixmap: QPixmap):
+    #     if hasattr(self, "image_label") and self.image_label:
+    #         scaled = pixmap.scaled(self.image_label.size() * self.scale_factor, Qt.KeepAspectRatio,
+    #                                Qt.SmoothTransformation)
+    #         self.image_label.setPixmap(scaled)
 
     def update_zoom(self):
         self.scale_factor = self.zoom_slider.value() / 100.0
-        self.render_combined_image()
+        # self.render_combined_image()
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
-        self.render_combined_image()
+        # self.render_combined_image()
 
     def mouse_move_event(self, event):
         if self.transform[0] and self.crs[0]:
@@ -269,6 +280,29 @@ class MainWindow(QMainWindow):
                 self.satmap2gp_thread.start()
         except Exception as e:
             print("[ERROR] Satmap2GPDialog 崩溃", e)
+
+    def update_map_layer(self, filename, pixmap, transform):
+        print(f"[DEBUG] ✅ 进入 update_map_layer() ：{filename}")
+        name = os.path.basename(filename)
+        print(f"[UI更新] 图层名: {name}")
+
+        if pixmap:
+            print(f"[UI更新] pixmap 尺寸: {pixmap.width()}x{pixmap.height()}")
+        else:
+            print(f"[UI更新] pixmap 为空！")
+
+        if transform:
+            print(f"[UI更新] transform 左上角: ({transform.c}, {transform.f})")
+        else:
+            print(f"[UI更新] transform 为 None！")
+
+        if pixmap and transform:
+            self.map_canvas.add_layer(name, pixmap, transform)
+            self.map_canvas.fitInView(self.map_canvas.scene.itemsBoundingRect(), Qt.KeepAspectRatio)
+            self.layer_list.addItem(name)
+        else:
+            self.append_log(f"❌ 地图图像加载失败: {filename}")
+
 
     def mouse_wheel_event(self, event):
         delta = event.angleDelta().y()
@@ -405,6 +439,28 @@ class MainWindow(QMainWindow):
             def log_wrapper(msg):
                 self.append_log(msg)
 
+
+            # def update_map_layer(self, filename, pixmap, transform):
+            #     name = os.path.basename(filename)
+            #     print(f"[UI更新] 图层名: {name}")
+            #
+            #     if pixmap:
+            #         print(f"[UI更新] pixmap 尺寸: {pixmap.width()}x{pixmap.height()}")
+            #     else:
+            #         print(f"[UI更新] pixmap 为空！")
+            #
+            #     if transform:
+            #         print(f"[UI更新] transform 左上角: ({transform.c}, {transform.f})")
+            #     else:
+            #         print(f"[UI更新] transform 为 None！")
+            #
+            #     if pixmap and transform:
+            #         self.map_canvas.add_layer(name, pixmap, transform)
+            #         self.map_canvas.fitInView(self.map_canvas.scene.itemsBoundingRect(), Qt.KeepAspectRatio)
+            #         self.layer_list.addItem(name)
+            #     else:
+            #         self.append_log(f"❌ 地图图像加载失败: {filename}")
+
             def done_callback(future):
                 try:
                     output_path = future.result()
@@ -412,24 +468,22 @@ class MainWindow(QMainWindow):
 
                     from utils.image_loader import ImageLoader
 
-                    def on_loaded(filename, pixmap):
-                        if pixmap:
-                            self.layer_manager.add_layer(os.path.basename(filename), pixmap)
-                            self.render_combined_image()
-                        else:
-                            self.append_log(f"❌ 图像加载失败: {filename}")
+                    def on_loaded(filename, pixmap, transform):
+                        print(f"[加载回调] 文件: {filename}")
+                        print(f"[回调内容] pixmap: {pixmap is not None}, transform: {transform is not None}")
+                        self.update_map_layer(filename, pixmap, transform)  # ✅ 改为直接调用，避免 lambda 闭包失效
 
-                    ImageLoader.load_async(output_path, self.transform, self.crs, on_loaded)
+                    ImageLoader.load_async_with_transform(output_path, on_loaded)
 
                 except Exception as e:
                     self.append_log(f"❌ 正射异常: {e}")
                 finally:
-                    if len(self.ortho_results) == total_tasks:
+                    if len(self.ortho_results) == self.total_tasks:
                         self.append_log("✅ 所有正射影像处理完成")
                         self.cancel_button.setEnabled(False)
                         self.cancel_button.setVisible(False)
 
-            total_tasks = 0
+            self.total_tasks= 0
             for fname in os.listdir(input_dir):
                 if fname.lower().endswith(('.tif', '.tiff', '.TIF', '.TIFF')):
                     base = os.path.splitext(fname)[0]
@@ -440,9 +494,9 @@ class MainWindow(QMainWindow):
                                                       log_wrapper)
                         future.add_done_callback(done_callback)
                         self.ortho_futures.append(future)
-                        total_tasks += 1
+                        self.total_tasks+= 1
                     else:
                         self.append_log(f"⚠️ 缺少 RPC 文件: {base}_rpc.txt")
 
-            if total_tasks == 0:
+            if self.total_tasks== 0:
                 self.append_log("⚠️ 未找到可处理的影像")
