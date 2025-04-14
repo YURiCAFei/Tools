@@ -4,15 +4,17 @@ import datetime
 from PyQt5.QtWidgets import QMainWindow, QWidget, QLabel, QTextEdit, QListWidget, QVBoxLayout, QHBoxLayout, QSlider, \
     QFileDialog, QAction, QListWidgetItem, QMenuBar, QMenu, QDialog, QProgressBar, QPushButton, QSizePolicy, \
     QSplitter, QMessageBox
-from PyQt5.QtCore import Qt, QTimer, QThreadPool
+from PyQt5.QtCore import Qt, QTimer, QThreadPool, QRunnable, pyqtSignal, QObject
 from PyQt5.QtGui import QPixmap
 from PyQt5 import QtGui
 
 from ui.extract_boundary_dialog import ExtractBoundaryDialog
 from ui.orthorectify_dialog import OrthorectifyDialog
+from ui.select_optimal_image_dialog import SelectOptimalImageDialog
 from utils.decompress_worker import DecompressWorker
 from utils.extract_boundary_worker import ExtractBoundaryTask
 from utils.image_loader import ImageLoader
+from utils.layer_loader import load_shapefile
 from utils.layer_manager import LayerManager
 from utils.coord_converter import CoordConverter
 from utils.file_process import decompress_process
@@ -24,6 +26,36 @@ from utils.satmap2gp_worker import Satmap2GPWorker
 from ui.lidar_downsample_dialog import LidarDownsampleDialog
 from utils.downsample_worker import DownsampleWorker
 from ui.map_canvas import MapViewWidget  # 新增地图显示器
+from utils.optimal_image_selector import get_files, choose_img
+from rasterio.transform import Affine
+
+
+class OptimalSelectWorkerSignals(QObject):
+    finished = pyqtSignal(list)
+    log = pyqtSignal(str)
+
+class OptimalSelectWorker(QRunnable):
+    def __init__(self, region_shp, image_dir, output_dir, max_images):
+        super().__init__()
+        self.region_shp = region_shp
+        self.image_dir = image_dir
+        self.output_dir = output_dir
+        self.max_images = max_images
+        self.signals = OptimalSelectWorkerSignals()
+
+    def run(self):
+        try:
+            self.signals.log.emit("📌 开始加载区域与图像边界文件...")
+            region_polygon, images_gdf = get_files(self.region_shp, self.image_dir, log=self.signals.log.emit)
+
+            self.signals.log.emit(f"📊 候选图像数: {len(images_gdf)}")
+            selected = choose_img(region_polygon, images_gdf, self.output_dir,
+                                  log=self.signals.log.emit, max_images=self.max_images)
+
+            self.signals.finished.emit(selected)
+        except Exception as e:
+            self.signals.log.emit(f"❌ 优选失败: {e}")
+            self.signals.finished.emit([])
 
 
 
@@ -191,6 +223,10 @@ class MainWindow(QMainWindow):
         boundary_action = QAction("边界SHP提取", self)
         boundary_action.triggered.connect(self.show_extract_boundary_dialog)
         shp_menu.addAction(boundary_action)
+        # ✅ 图像子集优选
+        optimal_action = QAction("图像子集优选", self)
+        optimal_action.triggered.connect(self.show_optimal_image_selector_dialog)
+        shp_menu.addAction(optimal_action)
 
         photogrammetry_menu.addMenu(shp_menu)
 
@@ -328,8 +364,15 @@ class MainWindow(QMainWindow):
             print(f"[UI更新] transform 为 None！")
 
         if pixmap and transform:
-            self.map_canvas.add_layer(name, pixmap, transform)
-            self.map_canvas.fitInView(self.map_canvas.scene.itemsBoundingRect(), Qt.KeepAspectRatio)
+            pixel_size = abs(transform.a)
+            width = pixmap.width()
+            height = pixmap.height()
+
+            center_x = transform.c + transform.a * (width / 2 - 0.5)
+            center_y = transform.f + transform.e * (height / 2 - 0.5)
+
+            self.map_canvas.add_layer(name, pixmap, transform, center_x, center_y, pixel_size)
+            # self.map_canvas.fitInView(self.map_canvas.scene.itemsBoundingRect(), Qt.KeepAspectRatio)
             # self.layer_list.addItem(name)
             item = QListWidgetItem(name)
             item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
@@ -588,3 +631,32 @@ class MainWindow(QMainWindow):
         if self.boundary_done == self.boundary_total:
             self.append_log("🎉 所有边界提取任务完成！")
 
+    def show_optimal_image_selector_dialog(self):
+        if not self.check_project_ready("图像子集优选"):
+            return
+
+        default_output = os.path.join(self.project_root, "img_selected")
+        dialog = SelectOptimalImageDialog(default_output, None, self)
+        if dialog.exec_():
+            region_shp, image_dir, output_dir, max_images = dialog.get_inputs()
+            self.append_log(f"🎯 开始优选图像子集（最多 {max_images} 张）")
+            self.append_log(f"📍 区域 SHP: {region_shp}")
+            self.append_log(f"📁 图像目录: {image_dir}")
+            self.append_log(f"📤 输出目录: {output_dir}")
+
+            os.makedirs(output_dir, exist_ok=True)
+
+            worker = OptimalSelectWorker(region_shp, image_dir, output_dir, max_images)
+            worker.signals.log.connect(self.append_log)
+
+            def on_done(file_list):
+                if file_list:
+                    self.append_log(f"✅ 优选完成，共选中 {len(file_list)} 张图像")
+                    for shp_path in file_list:
+                        # load_shapefile(shp_path, self.map_canvas, self.layer_list)
+                        load_shapefile(shp_path, self.map_canvas, self.layer_list, self.append_log)
+                else:
+                    self.append_log("⚠️ 未能成功选出图像或过程异常")
+
+            worker.signals.finished.connect(on_done)
+            QThreadPool.globalInstance().start(worker)

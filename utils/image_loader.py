@@ -1,10 +1,81 @@
 import numpy as np
-from PyQt5.QtGui import QImage, QPixmap
+from PyQt5.QtGui import QImage, QPixmap, QPainter, QColor, QPen
 from PyQt5.QtCore import QRunnable, QThreadPool, QObject, pyqtSignal
 import rasterio
 from rasterio.enums import Resampling
 import traceback
-import threading
+from PyQt5.QtGui import QPixmap, QPainter, QPen
+from PyQt5.QtCore import Qt, QRectF
+from shapely.geometry import Polygon, MultiPolygon, LineString, MultiLineString, Point, MultiPoint, base
+import geopandas as gpd
+from affine import Affine
+
+def convert_gdf_to_pixmap_transform(gdf, pixel_size=1.0):
+    try:
+        if gdf.crs is None:
+            gdf.set_crs(epsg=4326, inplace=True)
+        if gdf.crs.to_epsg() == 4326:
+            gdf = gdf.to_crs(epsg=3857)
+
+        gdf = gdf[gdf.geometry.apply(lambda geom: isinstance(geom, base.BaseGeometry))]
+        gdf = gdf[~gdf.geometry.is_empty & gdf.geometry.notnull()]
+        if gdf.empty:
+            raise ValueError("没有有效的几何")
+
+        minx, miny, maxx, maxy = gdf.total_bounds
+        width = maxx - minx
+        height = maxy - miny
+
+        img_width = int(width / pixel_size)
+        img_height = int(height / pixel_size)
+
+        pixmap = QPixmap(img_width, img_height)
+        pixmap.fill(Qt.transparent)
+        painter = QPainter(pixmap)
+        pen = QPen(Qt.red)
+        pen.setWidth(2)
+        painter.setPen(pen)
+
+        def to_local(x, y):
+            sx = (x - minx) / pixel_size
+            sy = img_height - (y - miny) / pixel_size
+            return int(sx), int(sy)
+
+        for geom in gdf.geometry:
+            if isinstance(geom, (Polygon, MultiPolygon)):
+                polys = [geom] if isinstance(geom, Polygon) else geom.geoms
+                for poly in polys:
+                    if poly.exterior is None: continue
+                    pts = [to_local(x, y) for x, y in poly.exterior.coords]
+                    for i in range(len(pts) - 1):
+                        painter.drawLine(*pts[i], *pts[i + 1])
+
+            elif isinstance(geom, (LineString, MultiLineString)):
+                lines = [geom] if isinstance(geom, LineString) else geom.geoms
+                for line in lines:
+                    pts = [to_local(x, y) for x, y in line.coords]
+                    for i in range(len(pts) - 1):
+                        painter.drawLine(*pts[i], *pts[i + 1])
+
+            elif isinstance(geom, (Point, MultiPoint)):
+                points = [geom] if isinstance(geom, Point) else geom.geoms
+                for pt in points:
+                    x, y = to_local(pt.x, pt.y)
+                    painter.drawEllipse(x - 2, y - 2, 4, 4)
+
+        painter.end()
+
+        # 输出位置信息
+        center_x = (minx + maxx) / 2
+        center_y = (miny + maxy) / 2
+        transform = Affine.translation(minx, miny) * Affine.scale(pixel_size, -pixel_size)
+
+        return pixmap, transform, center_x, center_y, pixel_size
+
+    except Exception as e:
+        print(f"❌ 转换失败: {e}")
+        return None, None, None, None, None
+
 
 class ImageLoadResult(QObject):
     finished = pyqtSignal(str, QPixmap, object)  # 增加 transform 输出

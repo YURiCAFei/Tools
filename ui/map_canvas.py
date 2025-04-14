@@ -36,19 +36,16 @@ class MapViewWidget(QGraphicsView):
     def set_active_layer(self, name):
         self.active_layer = name
 
-    def add_layer(self, name, pixmap: QPixmap, transform):
+    def add_layer(self, name, pixmap: QPixmap, transform, center_x, center_y, pixel_size):
         if self.transformer is None:
-            self.set_base_transform(transform)
+            self.set_base_transform(transform)  # 设置全局仿射变换
 
-        pixel_size = abs(transform.a)
         if not hasattr(self, 'base_pixel_size'):
             self.base_pixel_size = pixel_size
 
         scale_ratio = pixel_size / self.base_pixel_size
 
-        center_lon = transform.c + transform.a * (pixmap.width() / 2 - 0.5)
-        center_lat = transform.f + transform.e * (pixmap.height() / 2 - 0.5)
-        center_scene = self.transformer.geo_to_scene(center_lon, center_lat)
+        center_scene = self.transformer.geo_to_scene(center_x, center_y)
 
         item = QGraphicsPixmapItem(pixmap)
         item.setOffset(-pixmap.width() / 2, -pixmap.height() / 2)
@@ -58,6 +55,8 @@ class MapViewWidget(QGraphicsView):
         self.scene.addItem(item)
         self.layers[name] = item
         self.layer_offsets[name] = QPointF(0, 0)
+
+        self.fitInView(self.scene.itemsBoundingRect(), Qt.KeepAspectRatio)
 
     def apply_offset(self, name):
         if name in self.layers and name in self.layer_offsets:
