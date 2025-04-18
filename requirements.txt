@@ -76,3 +76,12 @@ win_inet_pton @ file:///D:/bld/win_inet_pton_1733130564612/work
 xyzservices @ file:///home/conda/feedstock_root/build_artifacts/xyzservices_1737234886776/work
 zipp @ file:///home/conda/feedstock_root/build_artifacts/zipp_1732827521216/work
 zstandard==0.23.0
+
+rarfile~=4.0
+numpy~=2.0.2
+geopandas~=1.0.1
+shapely~=2.0.7
+affine~=2.4.0
+scikit-learn~=1.6.1
+pandas~=2.2.3
+qgis~=3.42.0
