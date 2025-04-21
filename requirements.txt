@@ -1,92 +1,136 @@
-affine @ file:///home/conda/feedstock_root/build_artifacts/affine_1733762038348/work
-attrs @ file:///home/conda/feedstock_root/build_artifacts/attrs_1741918516150/work
-branca @ file:///home/conda/feedstock_root/build_artifacts/branca_1734433375112/work
-Brotli @ file:///D:/bld/brotli-split_1725267609074/work
-certifi @ file:///home/conda/feedstock_root/build_artifacts/certifi_1739515848642/work/certifi
-cffi @ file:///D:/bld/cffi_1725560792189/work
-charset-normalizer @ file:///home/conda/feedstock_root/build_artifacts/charset-normalizer_1735929714516/work
-click @ file:///D:/bld/click_1734858834134/work
-click-plugins @ file:///home/conda/feedstock_root/build_artifacts/click-plugins_1733731077999/work
-cligj @ file:///home/conda/feedstock_root/build_artifacts/cligj_1733749956636/work
-colorama @ file:///home/conda/feedstock_root/build_artifacts/colorama_1733218098505/work
-contourpy @ file:///D:/bld/contourpy_1727293720916/work
-coverage @ file:///D:/bld/coverage_1743381229528/work
-cycler @ file:///home/conda/feedstock_root/build_artifacts/cycler_1733332471406/work
-dataclasses @ file:///home/conda/feedstock_root/build_artifacts/dataclasses_1628958434797/work
+affine==2.4.0
+asttokens==3.0.0
+attrs==25.3.0
+backcall==0.2.0
+beautifulsoup4==4.13.4
+bleach==6.2.0
+branca==0.8.1
+Brotli==1.1.0
+certifi==2025.1.31
+cffi==1.17.1
+charset-normalizer==3.4.1
+click==8.1.8
+click-plugins==1.1.1
+cligj==0.7.2
+colorama==0.4.6
+contourpy==1.3.0
+coverage==7.8.0
+cycler==0.12.1
+dataclasses==0.8
+decorator==5.2.1
+defusedxml==0.7.1
+docopt==0.6.2
 EasyProcess==1.1
 entrypoint2==1.1
+executing==2.2.0
+fastjsonschema==2.21.1
 fiona==1.10.1
-folium @ file:///home/conda/feedstock_root/build_artifacts/folium_1740766619747/work
-fonttools @ file:///D:/bld/fonttools_1743732221414/work
-future @ file:///home/conda/feedstock_root/build_artifacts/future_1738926421307/work
+folium==0.19.5
+fonttools==4.57.0
+future==1.0.0
 GDAL==3.10.2
-geopandas @ file:///home/conda/feedstock_root/build_artifacts/geopandas_1734346029138/work
-h2 @ file:///home/conda/feedstock_root/build_artifacts/h2_1738578511449/work
-hpack @ file:///home/conda/feedstock_root/build_artifacts/hpack_1737618293087/work
-httplib2 @ file:///home/conda/feedstock_root/build_artifacts/httplib2_1733927481809/work
-hyperframe @ file:///home/conda/feedstock_root/build_artifacts/hyperframe_1737618333194/work
-idna @ file:///home/conda/feedstock_root/build_artifacts/idna_1733211830134/work
+geopandas==1.0.1
+h2==4.2.0
+hpack==4.1.0
+httplib2==0.22.0
+hyperframe==6.1.0
+idna==3.10
 imageio==2.37.0
-importlib_metadata @ file:///home/conda/feedstock_root/build_artifacts/importlib-metadata_1737420181517/work
-importlib_resources @ file:///home/conda/feedstock_root/build_artifacts/importlib_resources_1736252299705/work
-Jinja2 @ file:///home/conda/feedstock_root/build_artifacts/jinja2_1741263328855/work
-joblib @ file:///home/conda/feedstock_root/build_artifacts/joblib_1733736026804/work
-kiwisolver @ file:///D:/bld/kiwisolver_1725459303250/work
+importlib_metadata==8.6.1
+importlib_resources==6.5.2
+ipython==8.12.3
+jedi==0.19.2
+Jinja2==3.1.6
+joblib==1.4.2
+jsonschema==4.23.0
+jsonschema-specifications==2024.10.1
+jupyter_client==8.6.3
+jupyter_core==5.7.2
+jupyterlab_pygments==0.3.0
+kiwisolver==1.4.7
 lazy_loader==0.4
 lxml==5.3.2
-mapclassify @ file:///home/conda/feedstock_root/build_artifacts/mapclassify_1733731066416/work
-MarkupSafe @ file:///D:/bld/markupsafe_1733219648915/work
+mapclassify==2.8.1
+MarkupSafe==3.0.2
 matplotlib==3.9.4
-mock @ file:///home/conda/feedstock_root/build_artifacts/mock_1741073951612/work
+matplotlib-inline==0.1.7
+mistune==3.1.3
+mock==5.2.0
 munkres==1.1.4
-narwhals @ file:///home/conda/feedstock_root/build_artifacts/narwhals_1744204356398/work
-networkx @ file:///home/conda/feedstock_root/build_artifacts/networkx_1698504735452/work
+narwhals==1.34.1
+nbclient==0.10.2
+nbconvert==7.16.6
+nbformat==5.10.4
+networkx==3.2.1
 nose2==0.9.2
-numpy @ file:///D:/bld/numpy_1732314314278/work/dist/numpy-2.0.2-cp39-cp39-win_amd64.whl#sha256=8824ea87142626db7bbf79bdbcbd5b3a2fd77d7570bd62b4f705100e42b651e1
+numpy==2.0.2
 opencv-python==4.11.0.86
 opencv-python-headless==4.11.0.86
-OWSLib @ file:///home/conda/feedstock_root/build_artifacts/owslib_1715612110326/work
-packaging @ file:///home/conda/feedstock_root/build_artifacts/packaging_1733203243479/work
-pandas @ file:///D:/bld/pandas_1736810660203/work
+OWSLib==0.31.0
+packaging==24.2
+pandas==2.2.3
+pandocfilters==1.5.1
+parso==0.8.4
 patool==1.15.0
-pillow @ file:///D:/bld/pillow_1735929718993/work
-plotly @ file:///home/conda/feedstock_root/build_artifacts/plotly_1742240435426/work
-ply @ file:///home/conda/feedstock_root/build_artifacts/ply_1733239724146/work
-psycopg2 @ file:///D:/bld/psycopg2-split_1727892680674/work
-pycparser @ file:///home/conda/feedstock_root/build_artifacts/bld/rattler-build_pycparser_1733195786/work
-Pygments @ file:///home/conda/feedstock_root/build_artifacts/pygments_1736243443484/work
-pyogrio @ file:///D:/bld/pyogrio_1732013381469/work
+pickleshare==0.7.5
+pillow==11.1.0
+pip==25.0.1
+pipreqs==0.5.0
+platformdirs==4.3.7
+plotly==6.0.1
+ply==3.11
+prompt_toolkit==3.0.51
+psycopg2==2.9.9
+pure_eval==0.2.3
+pycparser==2.22
+Pygments==2.19.1
+pyogrio==0.10.0
 PyOpenGL==3.1.9
 PyOpenGL-accelerate==3.1.9
-pyparsing @ file:///home/conda/feedstock_root/build_artifacts/pyparsing_1743089729650/work
-pyproj @ file:///D:/bld/pyproj_1726679824209/work
+pyparsing==3.2.3
+pyproj==3.6.1
 PyQt5==5.15.9
-PyQt5-sip @ file:///D:/bld/pyqt-split_1695417932202/work/pyqt_sip
-PySocks @ file:///D:/bld/pysocks_1733217287171/work
-python-dateutil @ file:///home/conda/feedstock_root/build_artifacts/python-dateutil_1733215673016/work
-pytz @ file:///home/conda/feedstock_root/build_artifacts/pytz_1706886791323/work
+PyQt5-sip==12.12.2
+PySocks==1.7.1
+python-dateutil==2.9.0.post0
+pytz==2024.1
 pyunpack==0.3
-PyYAML @ file:///D:/bld/pyyaml_1737454672828/work
+pywin32==310
+PyYAML==6.0.2
+pyzmq==26.4.0
 QScintilla==2.14.1
-rarfile @ file:///home/conda/feedstock_root/build_artifacts/rarfile_1596224908365/work
+rarfile==4.0
 rasterio==1.4.3
-requests @ file:///home/conda/feedstock_root/build_artifacts/requests_1733217035951/work
+referencing==0.36.2
+requests==2.32.3
+rpds-py==0.24.0
 scikit-image==0.24.0
-scikit-learn @ file:///D:/bld/scikit-learn_1736496793625/work/dist/scikit_learn-1.6.1-cp39-cp39-win_amd64.whl#sha256=bb1e08460161bd7b8163df245d711be5c4d65ff892d330db2e71295806b53f85
-scipy @ file:///C:/bld/scipy-split_1716470385682/work/dist/scipy-1.13.1-cp39-cp39-win_amd64.whl#sha256=490e922ef930c40e74290d95915a98295b9059d02849059317bab82ba7810581
-shapely @ file:///D:/bld/shapely_1741166987261/work
-sip @ file:///D:/bld/sip_1697300548918/work
-six @ file:///home/conda/feedstock_root/build_artifacts/six_1733380938961/work
-snuggs @ file:///home/conda/feedstock_root/build_artifacts/snuggs_1733818638588/work
-threadpoolctl @ file:///home/conda/feedstock_root/build_artifacts/threadpoolctl_1741878222898/work
+scikit-learn==1.6.1
+scipy==1.13.1
+setuptools==78.1.0
+shapely==2.0.7
+sip==6.7.12
+six==1.17.0
+snuggs==1.4.7
+soupsieve==2.7
+stack-data==0.6.3
+threadpoolctl==3.6.0
 tifffile==2024.8.30
-toml @ file:///home/conda/feedstock_root/build_artifacts/toml_1734091811753/work
-tomli @ file:///home/conda/feedstock_root/build_artifacts/tomli_1733256695513/work
-tqdm @ file:///home/conda/feedstock_root/build_artifacts/tqdm_1735661334605/work
-tzdata @ file:///home/conda/feedstock_root/build_artifacts/python-tzdata_1742745135198/work
-unicodedata2 @ file:///D:/bld/unicodedata2_1736692548847/work
-urllib3 @ file:///home/conda/feedstock_root/build_artifacts/urllib3_1744323578849/work
-win_inet_pton @ file:///D:/bld/win_inet_pton_1733130564612/work
-xyzservices @ file:///home/conda/feedstock_root/build_artifacts/xyzservices_1737234886776/work
-zipp @ file:///home/conda/feedstock_root/build_artifacts/zipp_1732827521216/work
+tinycss2==1.4.0
+toml==0.10.2
+tomli==2.2.1
+tornado==6.4.2
+tqdm==4.67.1
+traitlets==5.14.3
+typing_extensions==4.13.2
+tzdata==2025.2
+unicodedata2==16.0.0
+urllib3==2.4.0
+wcwidth==0.2.13
+webencodings==0.5.1
+wheel==0.45.1
+win_inet_pton==1.1.0
+xyzservices==2025.1.0
+yarg==0.1.9
+zipp==3.21.0
 zstandard==0.23.0

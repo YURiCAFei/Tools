@@ -70,6 +70,11 @@ conda activate tools_env
 pip install -r requirements.txt
 ```
 
+或者直接运行下面命令
+```shell
+conda env create -f environment.yml
+```
+
 > ⚠ 如果使用 PyQGIS，请确保已正确配置 QGIS Python 环境路径，建议通过 conda 或官方安装 QGIS Desktop + Python API。
 
 ------
